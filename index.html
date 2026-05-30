@@ -35,11 +35,11 @@ h1{font-size:1.6rem;font-weight:700;margin-bottom:.25rem;color:#eee}
 .overlay.active{display:flex;opacity:1}
 .overlay.closing{opacity:0}
 .overlay-bg{position:absolute;inset:0;z-index:1}
-.overlay-content{position:relative;z-index:2;display:flex;align-items:center;justify-content:center;width:100%;height:100%;padding:3rem}
+.overlay-content{position:relative;z-index:2;display:flex;align-items:center;justify-content:center;width:100%;height:100%;padding:3rem;overflow:hidden}
 .overlay-close{position:absolute;top:.75rem;right:1rem;background:none;border:none;color:#fff;font-size:2.2rem;cursor:pointer;z-index:5;opacity:.6;transition:opacity .12s;padding:.25rem;line-height:1}
 .overlay-close:hover{opacity:1}
-.overlay-img{max-width:92vw;max-height:82vh;object-fit:contain;border-radius:4px;opacity:1;transition:opacity .2s}
-.overlay-img.fade{opacity:0}
+.overlay-img{max-width:92vw;max-height:82vh;object-fit:contain;border-radius:4px;cursor:grab}
+.overlay-img.dragging{cursor:grabbing}
 .overlay-video{max-width:92vw;max-height:82vh;border-radius:4px;background:#000}
 .overlay-name{position:absolute;top:1rem;left:1.5rem;color:rgba(255,255,255,.6);font-size:.8rem;z-index:5;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nav-btn{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.06);border:none;color:#fff;font-size:2.2rem;cursor:pointer;z-index:5;padding:1.2rem .9rem;transition:background .12s;border-radius:6px;line-height:1}
@@ -50,6 +50,10 @@ h1{font-size:1.6rem;font-weight:700;margin-bottom:.25rem;color:#eee}
 .counter{color:rgba(255,255,255,.6);font-size:.82rem;background:rgba(0,0,0,.5);padding:.3rem .8rem;border-radius:14px}
 .download-btn{display:inline-flex;align-items:center;gap:.35rem;color:#fff;background:rgba(255,255,255,.1);border:none;padding:.3rem .8rem;border-radius:14px;cursor:pointer;font-size:.82rem;text-decoration:none;transition:background .12s}
 .download-btn:hover{background:rgba(255,255,255,.22)}
+.zoom-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;color:#fff;background:rgba(255,255,255,.1);border:none;border-radius:14px;cursor:pointer;font-size:1.1rem;line-height:1;transition:background .12s}
+.zoom-btn:hover{background:rgba(255,255,255,.22)}
+.zoom-btn:disabled{opacity:.3;cursor:default}
+.zoom-level{color:rgba(255,255,255,.6);font-size:.78rem;min-width:2.4rem;text-align:center;font-variant-numeric:tabular-nums}
 @media(max-width:640px){body{padding:1rem}.grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}.nav-btn{font-size:1.4rem;padding:.6rem .4rem}.overlay-content{padding:1.5rem}.top-bar{flex-direction:column;align-items:stretch}.search-wrap{max-width:none}}
 </style>
 </head>
@@ -78,6 +82,9 @@ h1{font-size:1.6rem;font-weight:700;margin-bottom:.25rem;color:#eee}
   <div class="overlay-name" id="overlayName"></div>
   <div class="overlay-content" id="overlayContent"></div>
   <div class="toolbar">
+    <button class="zoom-btn" id="zoomOutBtn" title="Zoom out">−</button>
+    <span class="zoom-level" id="zoomLevel">100%</span>
+    <button class="zoom-btn" id="zoomInBtn" title="Zoom in">+</button>
     <span class="counter" id="counter"></span>
     <a class="download-btn" id="downloadBtn" download target="_blank">&#8595; Download</a>
   </div>
@@ -105,6 +112,9 @@ let isTransitioning = false;
 let currentMedia = null;
 let currentFilter = 'all';
 let currentSearch = '';
+let zoom = 1, panX = 0, panY = 0;
+let isDragging = false, dragStartX = 0, dragStartY = 0, dragPanX = 0, dragPanY = 0;
+const ZOOM_MIN = 0.5, ZOOM_MAX = 5, ZOOM_STEP = 0.25;
 
 function applyFilterAndSearch() {
   let visible = 0;
@@ -141,6 +151,7 @@ function openViewer(index) {
   overlay.classList.remove('closing');
   overlay.classList.add('active');
   document.body.style.overflow = 'hidden';
+  resetZoom();
   renderMedia();
 }
 
@@ -192,6 +203,7 @@ function navigate(direction) {
   if (isTransitioning) return;
   isTransitioning = true;
   currentIndex = (currentIndex + direction + items.length) % items.length;
+  resetZoom();
   renderMedia();
   isTransitioning = false;
 }
@@ -210,6 +222,87 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeViewer();
   if (e.key === 'ArrowLeft') navigate(-1);
   if (e.key === 'ArrowRight') navigate(1);
+});
+
+const zoomInBtn = document.getElementById('zoomInBtn');
+const zoomOutBtn = document.getElementById('zoomOutBtn');
+const zoomLevel = document.getElementById('zoomLevel');
+
+function resetZoom() {
+  zoom = 1; panX = 0; panY = 0;
+  if (currentMedia && currentMedia.tagName === 'IMG') {
+    currentMedia.style.transform = '';
+  }
+  updateZoomUI();
+}
+
+function updateZoomUI() {
+  if (!zoomLevel) return;
+  zoomLevel.textContent = Math.round(zoom * 100) + '%';
+  zoomOutBtn.disabled = zoom <= ZOOM_MIN;
+  zoomInBtn.disabled = zoom >= ZOOM_MAX;
+}
+
+function zoomIn() {
+  if (currentMedia?.tagName !== 'IMG') return;
+  zoom = Math.min(zoom + ZOOM_STEP, ZOOM_MAX);
+  applyZoom();
+}
+
+function zoomOut() {
+  if (currentMedia?.tagName !== 'IMG') return;
+  zoom = Math.max(zoom - ZOOM_STEP, ZOOM_MIN);
+  applyZoom();
+}
+
+function applyZoom() {
+  if (!currentMedia || currentMedia.tagName !== 'IMG') return;
+  if (zoom === 1 && panX === 0 && panY === 0) {
+    currentMedia.style.transform = '';
+  } else {
+    currentMedia.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoom + ')';
+  }
+  updateZoomUI();
+}
+
+zoomOutBtn.addEventListener('click', zoomOut);
+zoomInBtn.addEventListener('click', zoomIn);
+
+overlayContent.addEventListener('wheel', (e) => {
+  if (!overlay.classList.contains('active') || currentMedia?.tagName !== 'IMG') return;
+  e.preventDefault();
+  if (e.deltaY < 0) { zoomIn(); } else { zoomOut(); }
+}, { passive: false });
+
+overlayContent.addEventListener('mousedown', (e) => {
+  if (zoom <= 1 || currentMedia?.tagName !== 'IMG') return;
+  if (e.target.closest('button, a, input, .overlay-name')) return;
+  isDragging = true;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  dragPanX = panX;
+  dragPanY = panY;
+  if (currentMedia) currentMedia.classList.add('dragging');
+  e.preventDefault();
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  panX = dragPanX + (e.clientX - dragStartX);
+  panY = dragPanY + (e.clientY - dragStartY);
+  applyZoom();
+});
+
+document.addEventListener('mouseup', () => {
+  if (isDragging) {
+    isDragging = false;
+    if (currentMedia) currentMedia.classList.remove('dragging');
+  }
+});
+
+overlayContent.addEventListener('dblclick', () => {
+  if (currentMedia?.tagName !== 'IMG') return;
+  if (zoom > 1) { resetZoom(); } else { zoom = 2; panX = 0; panY = 0; applyZoom(); }
 });
 
 const lazyObserver = new IntersectionObserver((entries, obs) => {
