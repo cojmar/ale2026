@@ -98,7 +98,7 @@ h1{font-size:1.6rem;font-weight:700;margin-bottom:.25rem;color:#eee}
     <span class="counter" id="counter"></span>
     <button class="play-btn" id="playBtn" title="Autoplay">&#9654;</button>
     <div class="speed-wrap">
-      <input type="range" class="speed-slider" id="speedSlider" min="0.5" max="5" step="0.5" value="1">
+      <input type="range" class="speed-slider" id="speedSlider" min="0.25" max="5" step="0.25" value="1">
       <span class="speed-label" id="speedLabel">1s</span>
     </div>
     <a class="download-btn" id="downloadBtn" download target="_blank">&#8595; Download</a>
@@ -290,19 +290,26 @@ function updateZoomUI() {
 
 function zoomIn() {
   if (currentMedia?.tagName !== 'IMG') return;
+  const oldZoom = zoom;
   zoom = Math.min(zoom + ZOOM_STEP, ZOOM_MAX);
+  panX *= zoom / oldZoom;
+  panY *= zoom / oldZoom;
   applyZoom();
 }
 
 function zoomOut() {
   if (currentMedia?.tagName !== 'IMG') return;
+  const oldZoom = zoom;
   zoom = Math.max(zoom - ZOOM_STEP, ZOOM_MIN);
+  panX *= zoom / oldZoom;
+  panY *= zoom / oldZoom;
   applyZoom();
 }
 
 function applyZoom() {
   if (!currentMedia || currentMedia.tagName !== 'IMG') return;
-  if (zoom === 1 && panX === 0 && panY === 0) {
+  if (zoom <= 1) { zoom = 1; panX = 0; panY = 0; }
+  if (zoom === 1) {
     currentMedia.style.transform = '';
   } else {
     currentMedia.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoom + ')';
@@ -358,14 +365,12 @@ function stopAutoplay() {
   onMediaReady = null;
   playBtn.textContent = '\u25B6';
   playBtn.classList.remove('active');
-  speedSlider.disabled = false;
 }
 
 function startAutoplay() {
   stopAutoplay();
   playBtn.textContent = '\u23F8';
   playBtn.classList.add('active');
-  speedSlider.disabled = true;
   onMediaReady = scheduleNext;
   scheduleNext();
 }
