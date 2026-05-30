@@ -123,7 +123,6 @@ const subtitle = document.getElementById('subtitle');
 const wraps = document.querySelectorAll('.thumb-wrap');
 
 let currentIndex = 0;
-let isTransitioning = false;
 let currentMedia = null;
 let currentFilter = 'all';
 let currentSearch = '';
@@ -163,12 +162,10 @@ filterBtns.forEach(btn => {
 
 function openViewer(index) {
   stopAutoplay();
-  currentIndex = index;
   overlay.classList.remove('closing');
   overlay.classList.add('active');
   document.body.style.overflow = 'hidden';
-  resetZoom();
-  renderMedia();
+  showMedia(index);
 }
 
 function closeViewer() {
@@ -193,10 +190,14 @@ function clearMedia() {
   }
 }
 
-function renderMedia() {
+function showMedia(index) {
   clearMedia();
-  const item = items[currentIndex];
+  currentIndex = index;
+  resetZoom();
+  const item = items[index];
   overlayName.textContent = item.name;
+  counter.textContent = (index + 1) + ' / ' + items.length;
+  downloadBtn.href = item.src;
   if (item.type === 'video') {
     const video = document.createElement('video');
     video.className = 'overlay-video';
@@ -212,17 +213,37 @@ function renderMedia() {
     overlayContent.appendChild(img);
     currentMedia = img;
   }
-  counter.textContent = (currentIndex + 1) + ' / ' + items.length;
-  downloadBtn.href = item.src;
+  if (onMediaReady) onMediaReady();
+}
+
+function preloadAndNavigate(newIndex) {
+  if (pendingLoad) {
+    pendingLoad.img.onload = null;
+    pendingLoad.img.onerror = null;
+    pendingLoad = null;
+  }
+  const item = items[newIndex];
+  if (item.type === 'video') {
+    showMedia(newIndex);
+    return;
+  }
+  const img = new Image();
+  pendingLoad = { img, index: newIndex };
+  img.onload = () => {
+    if (!pendingLoad || pendingLoad.index !== newIndex) return;
+    pendingLoad = null;
+    showMedia(newIndex);
+  };
+  img.onerror = () => {
+    if (!pendingLoad || pendingLoad.index !== newIndex) return;
+    pendingLoad = null;
+    showMedia(newIndex);
+  };
+  img.src = item.src;
 }
 
 function navigate(direction) {
-  if (isTransitioning) return;
-  isTransitioning = true;
-  currentIndex = (currentIndex + direction + items.length) % items.length;
-  resetZoom();
-  renderMedia();
-  isTransitioning = false;
+  preloadAndNavigate((currentIndex + direction + items.length) % items.length);
 }
 
 wraps.forEach((w, i) => {
@@ -249,6 +270,8 @@ const speedSlider = document.getElementById('speedSlider');
 const speedLabel = document.getElementById('speedLabel');
 
 let autoplayTimer = null;
+let pendingLoad = null;
+let onMediaReady = null;
 
 function resetZoom() {
   zoom = 1; panX = 0; panY = 0;
@@ -329,9 +352,10 @@ overlayContent.addEventListener('dblclick', () => {
 
 function stopAutoplay() {
   if (autoplayTimer) {
-    clearInterval(autoplayTimer);
+    clearTimeout(autoplayTimer);
     autoplayTimer = null;
   }
+  onMediaReady = null;
   playBtn.textContent = '\u25B6';
   playBtn.classList.remove('active');
   speedSlider.disabled = false;
@@ -342,8 +366,15 @@ function startAutoplay() {
   playBtn.textContent = '\u23F8';
   playBtn.classList.add('active');
   speedSlider.disabled = true;
+  onMediaReady = scheduleNext;
+  scheduleNext();
+}
+
+function scheduleNext() {
   const ms = parseFloat(speedSlider.value) * 1000;
-  autoplayTimer = setInterval(() => navigate(1), ms);
+  autoplayTimer = setTimeout(() => {
+    preloadAndNavigate((currentIndex + 1) % items.length);
+  }, ms);
 }
 
 function toggleAutoplay() {
