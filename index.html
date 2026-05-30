@@ -54,6 +54,16 @@ h1{font-size:1.6rem;font-weight:700;margin-bottom:.25rem;color:#eee}
 .zoom-btn:hover{background:rgba(255,255,255,.22)}
 .zoom-btn:disabled{opacity:.3;cursor:default}
 .zoom-level{color:rgba(255,255,255,.6);font-size:.78rem;min-width:2.4rem;text-align:center;font-variant-numeric:tabular-nums}
+.play-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:28px;color:#fff;background:rgba(255,255,255,.1);border:none;border-radius:14px;cursor:pointer;font-size:.82rem;line-height:1;transition:background .12s}
+.play-btn:hover{background:rgba(255,255,255,.22)}
+.play-btn.active{background:rgba(0,180,80,.35)}
+.play-btn.active:hover{background:rgba(0,200,90,.5)}
+.speed-wrap{display:flex;align-items:center;gap:.35rem}
+.speed-slider{width:56px;height:4px;accent-color:#888;cursor:pointer;-webkit-appearance:none;appearance:none;background:rgba(255,255,255,.15);border-radius:2px;outline:none}
+.speed-slider::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#ccc;cursor:pointer;border:none}
+.speed-slider::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#ccc;cursor:pointer;border:none}
+.speed-slider:disabled{opacity:.3;cursor:default}
+.speed-label{color:rgba(255,255,255,.6);font-size:.72rem;min-width:1.8rem;text-align:center;font-variant-numeric:tabular-nums}
 @media(max-width:640px){body{padding:1rem}.grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}.nav-btn{font-size:1.4rem;padding:.6rem .4rem}.overlay-content{padding:1.5rem}.top-bar{flex-direction:column;align-items:stretch}.search-wrap{max-width:none}}
 </style>
 </head>
@@ -86,6 +96,11 @@ h1{font-size:1.6rem;font-weight:700;margin-bottom:.25rem;color:#eee}
     <span class="zoom-level" id="zoomLevel">100%</span>
     <button class="zoom-btn" id="zoomInBtn" title="Zoom in">+</button>
     <span class="counter" id="counter"></span>
+    <button class="play-btn" id="playBtn" title="Autoplay">&#9654;</button>
+    <div class="speed-wrap">
+      <input type="range" class="speed-slider" id="speedSlider" min="0.5" max="5" step="0.5" value="1">
+      <span class="speed-label" id="speedLabel">1s</span>
+    </div>
     <a class="download-btn" id="downloadBtn" download target="_blank">&#8595; Download</a>
   </div>
 </div>
@@ -147,6 +162,7 @@ filterBtns.forEach(btn => {
 });
 
 function openViewer(index) {
+  stopAutoplay();
   currentIndex = index;
   overlay.classList.remove('closing');
   overlay.classList.add('active');
@@ -156,6 +172,7 @@ function openViewer(index) {
 }
 
 function closeViewer() {
+  stopAutoplay();
   overlay.classList.add('closing');
   document.body.style.overflow = '';
   setTimeout(() => {
@@ -212,21 +229,26 @@ wraps.forEach((w, i) => {
   w.querySelector('.thumb').addEventListener('click', () => openViewer(i));
 });
 
-prevBtn.addEventListener('click', () => navigate(-1));
-nextBtn.addEventListener('click', () => navigate(1));
+prevBtn.addEventListener('click', () => { stopAutoplay(); navigate(-1); });
+nextBtn.addEventListener('click', () => { stopAutoplay(); navigate(1); });
 closeBtn.addEventListener('click', closeViewer);
 overlayBg.addEventListener('click', closeViewer);
 
 document.addEventListener('keydown', (e) => {
   if (!overlay.classList.contains('active')) return;
   if (e.key === 'Escape') closeViewer();
-  if (e.key === 'ArrowLeft') navigate(-1);
-  if (e.key === 'ArrowRight') navigate(1);
+  if (e.key === 'ArrowLeft') { stopAutoplay(); navigate(-1); }
+  if (e.key === 'ArrowRight') { stopAutoplay(); navigate(1); }
 });
 
 const zoomInBtn = document.getElementById('zoomInBtn');
 const zoomOutBtn = document.getElementById('zoomOutBtn');
 const zoomLevel = document.getElementById('zoomLevel');
+const playBtn = document.getElementById('playBtn');
+const speedSlider = document.getElementById('speedSlider');
+const speedLabel = document.getElementById('speedLabel');
+
+let autoplayTimer = null;
 
 function resetZoom() {
   zoom = 1; panX = 0; panY = 0;
@@ -304,6 +326,32 @@ overlayContent.addEventListener('dblclick', () => {
   if (currentMedia?.tagName !== 'IMG') return;
   if (zoom > 1) { resetZoom(); } else { zoom = 2; panX = 0; panY = 0; applyZoom(); }
 });
+
+function stopAutoplay() {
+  if (autoplayTimer) {
+    clearInterval(autoplayTimer);
+    autoplayTimer = null;
+  }
+  playBtn.textContent = '\u25B6';
+  playBtn.classList.remove('active');
+  speedSlider.disabled = false;
+}
+
+function startAutoplay() {
+  stopAutoplay();
+  playBtn.textContent = '\u23F8';
+  playBtn.classList.add('active');
+  speedSlider.disabled = true;
+  const ms = parseFloat(speedSlider.value) * 1000;
+  autoplayTimer = setInterval(() => navigate(1), ms);
+}
+
+function toggleAutoplay() {
+  if (autoplayTimer) { stopAutoplay(); } else { startAutoplay(); }
+}
+
+playBtn.addEventListener('click', toggleAutoplay);
+speedSlider.addEventListener('input', () => { speedLabel.textContent = speedSlider.value + 's'; });
 
 const lazyObserver = new IntersectionObserver((entries, obs) => {
   entries.forEach(entry => {
