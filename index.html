@@ -179,9 +179,8 @@ function renderMedia() {
     currentMedia = video;
   } else {
     const img = document.createElement('img');
-    img.className = 'overlay-img fade';
+    img.className = 'overlay-img';
     img.src = item.src;
-    img.onload = () => img.classList.remove('fade');
     overlayContent.appendChild(img);
     currentMedia = img;
   }
@@ -192,14 +191,9 @@ function renderMedia() {
 function navigate(direction) {
   if (isTransitioning) return;
   isTransitioning = true;
-  if (currentMedia && currentMedia.tagName === 'IMG') {
-    currentMedia.classList.add('fade');
-  }
-  setTimeout(() => {
-    currentIndex = (currentIndex + direction + items.length) % items.length;
-    renderMedia();
-    isTransitioning = false;
-  }, 200);
+  currentIndex = (currentIndex + direction + items.length) % items.length;
+  renderMedia();
+  isTransitioning = false;
 }
 
 wraps.forEach((w, i) => {
