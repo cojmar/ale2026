@@ -215,18 +215,24 @@ document.addEventListener('keydown', (e) => {
 const lazyObserver = new IntersectionObserver((entries, obs) => {
   entries.forEach(entry => {
     if (entry.isIntersecting) {
-      const img = entry.target;
-      if (img.dataset.src) {
-        img.src = img.dataset.src;
-        img.removeAttribute('data-src');
+      const wrap = entry.target;
+      const thumb = wrap.querySelector('.thumb');
+      if (thumb && !thumb.querySelector('img')) {
+        const img = document.createElement('img');
+        img.src = wrap.dataset.src;
+        img.alt = '';
+        img.loading = 'lazy';
+        thumb.appendChild(img);
       }
-      obs.unobserve(img);
+      obs.unobserve(wrap);
     }
   });
 }, { rootMargin: '300px' });
 
-document.querySelectorAll('.thumb img').forEach(img => {
-  lazyObserver.observe(img);
+document.querySelectorAll('.thumb-wrap').forEach(wrap => {
+  const img = wrap.querySelector('.thumb img');
+  if (img) img.remove();
+  lazyObserver.observe(wrap);
 });
 </script>
 </body>
